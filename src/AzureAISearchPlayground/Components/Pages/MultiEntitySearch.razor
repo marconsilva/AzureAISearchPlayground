@@ -1,0 +1,69 @@
+@page "/multi-entity-search"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject IConfiguration Configuration
+
+<PageTitle>Multi-Entity Search</PageTitle>
+
+<h1>Multi-Entity Search</h1>
+
+<input @bind="searchQuery" @bind:event="oninput" placeholder="Search for movies, TV shows, cast members..." class="form-control" />
+
+@if (searchResults != null && searchResults.Any())
+{
+    <div class="grid">
+        @foreach (var result in searchResults)
+        {
+            <div class="grid-item">
+                <img src="@result.CoverImageUrl" alt="@result.Title" />
+                <p>@result.Title</p>
+            </div>
+        }
+    </div>
+}
+else if (!string.IsNullOrEmpty(searchQuery))
+{
+    <p>No results found.</p>
+}
+
+@code {
+    private string searchQuery = string.Empty;
+    private List<SearchResult> searchResults = new();
+
+    private async Task OnSearchQueryChanged(ChangeEventArgs e)
+    {
+        searchQuery = e.Value.ToString();
+        if (!string.IsNullOrEmpty(searchQuery))
+        {
+            var apiKey = Configuration["AZURE_SEARCH_API_KEY"];
+            var serviceName = Configuration["AZURE_SEARCH_SERVICE_NAME"];
+            var indexName = Configuration["AZURE_SEARCH_INDEX_NAME"];
+            var endpoint = Configuration["AZURE_SEARCH_ENDPOINT"];
+
+            var url = $"{endpoint}/indexes/{indexName}/docs/search?api-version=2021-04-30-Preview&search={searchQuery}";
+            Http.DefaultRequestHeaders.Add("api-key", apiKey);
+
+            var response = await Http.GetFromJsonAsync<SearchResponse>(url);
+            searchResults = response?.Value.Select(v => new SearchResult
+            {
+                Title = v.Title,
+                CoverImageUrl = v.CoverImageUrl
+            }).ToList() ?? new List<SearchResult>();
+        }
+        else
+        {
+            searchResults.Clear();
+        }
+    }
+
+    private class SearchResponse
+    {
+        public List<SearchResult> Value { get; set; }
+    }
+
+    private class SearchResult
+    {
+        public string Title { get; set; }
+        public string CoverImageUrl { get; set; }
+    }
+}

@@ -1,0 +1,107 @@
+@page "/filtered-search"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject IConfiguration Configuration
+
+<PageTitle>Filtered Search</PageTitle>
+
+<h1>Filtered Search</h1>
+
+<div class="filters">
+    <label>
+        Genre:
+        <select @bind="selectedGenre" @onchange="OnFilterChanged">
+            <option value="">All</option>
+            @foreach (var genre in genres)
+            {
+                <option value="@genre">@genre</option>
+            }
+        </select>
+    </label>
+    <label>
+        Year:
+        <select @bind="selectedYear" @onchange="OnFilterChanged">
+            <option value="">All</option>
+            @foreach (var year in years)
+            {
+                <option value="@year">@year</option>
+            }
+        </select>
+    </label>
+</div>
+
+@if (searchResults != null && searchResults.Any())
+{
+    <div class="grid">
+        @foreach (var result in searchResults)
+        {
+            <div class="grid-item">
+                <img src="@result.CoverImageUrl" alt="@result.Title" />
+                <p>@result.Title</p>
+            </div>
+        }
+    </div>
+}
+else if (isSearching)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <p>No results found.</p>
+}
+
+@code {
+    private string selectedGenre = string.Empty;
+    private string selectedYear = string.Empty;
+    private List<Movie> searchResults = new();
+    private List<string> genres = new() { "Action", "Comedy", "Drama", "Horror", "Sci-Fi" };
+    private List<string> years = new() { "2021", "2020", "2019", "2018", "2017" };
+    private bool isSearching = false;
+
+    private async Task OnFilterChanged(ChangeEventArgs e)
+    {
+        isSearching = true;
+        var apiKey = Configuration["AZURE_SEARCH_API_KEY"];
+        var serviceName = Configuration["AZURE_SEARCH_SERVICE_NAME"];
+        var indexName = Configuration["AZURE_SEARCH_INDEX_NAME"];
+        var endpoint = Configuration["AZURE_SEARCH_ENDPOINT"];
+
+        var filter = string.Empty;
+        if (!string.IsNullOrEmpty(selectedGenre))
+        {
+            filter += $"genre eq '{selectedGenre}'";
+        }
+        if (!string.IsNullOrEmpty(selectedYear))
+        {
+            if (!string.IsNullOrEmpty(filter))
+            {
+                filter += " and ";
+            }
+            filter += $"year eq '{selectedYear}'";
+        }
+
+        var url = $"{endpoint}/indexes/{indexName}/docs?api-version=2021-04-30-Preview&$filter={filter}";
+        Http.DefaultRequestHeaders.Add("api-key", apiKey);
+
+        var response = await Http.GetFromJsonAsync<SearchResponse>(url);
+        searchResults = response?.Value.Select(v => new Movie
+        {
+            Title = v.Title,
+            CoverImageUrl = v.CoverImageUrl
+        }).ToList() ?? new List<Movie>();
+
+        isSearching = false;
+    }
+
+    private class SearchResponse
+    {
+        public List<Movie> Value { get; set; }
+    }
+
+    private class Movie
+    {
+        public string Title { get; set; }
+        public string CoverImageUrl { get; set; }
+    }
+}

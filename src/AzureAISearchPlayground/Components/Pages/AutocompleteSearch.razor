@@ -1,0 +1,75 @@
+@page "/autocomplete-search"
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject IConfiguration Configuration
+
+<PageTitle>Autocomplete Search</PageTitle>
+
+<h1>Autocomplete Search</h1>
+
+<input @bind="searchQuery" @bind:event="oninput" placeholder="Search for a movie..." class="form-control" />
+
+@if (searchResults != null && searchResults.Any())
+{
+    <div class="grid">
+        @foreach (var result in searchResults)
+        {
+            <div class="grid-item">
+                <img src="@result.CoverImageUrl" alt="@result.Title" />
+                <p>@result.Title</p>
+            </div>
+        }
+    </div>
+}
+else if (!string.IsNullOrEmpty(searchQuery))
+{
+    <p>No results found.</p>
+}
+
+@code {
+    private string searchQuery = string.Empty;
+    private List<Movie> searchResults = new();
+
+    private async Task OnSearchQueryChanged(ChangeEventArgs e)
+    {
+        searchQuery = e.Value.ToString();
+        if (!string.IsNullOrEmpty(searchQuery))
+        {
+            var apiKey = Configuration["AZURE_SEARCH_API_KEY"];
+            var serviceName = Configuration["AZURE_SEARCH_SERVICE_NAME"];
+            var indexName = Configuration["AZURE_SEARCH_INDEX_NAME"];
+            var endpoint = Configuration["AZURE_SEARCH_ENDPOINT"];
+
+            var url = $"{endpoint}/indexes/{indexName}/docs/autocomplete?api-version=2021-04-30-Preview&search={searchQuery}&suggesterName=sg";
+            Http.DefaultRequestHeaders.Add("api-key", apiKey);
+
+            var response = await Http.GetFromJsonAsync<AutocompleteResponse>(url);
+            searchResults = response?.Value.Select(v => new Movie
+            {
+                Title = v.Text,
+                CoverImageUrl = v.Document.CoverImageUrl
+            }).ToList() ?? new List<Movie>();
+        }
+        else
+        {
+            searchResults.Clear();
+        }
+    }
+
+    private class AutocompleteResponse
+    {
+        public List<AutocompleteResult> Value { get; set; }
+    }
+
+    private class AutocompleteResult
+    {
+        public string Text { get; set; }
+        public Movie Document { get; set; }
+    }
+
+    private class Movie
+    {
+        public string Title { get; set; }
+        public string CoverImageUrl { get; set; }
+    }
+}
