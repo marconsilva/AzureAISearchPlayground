@@ -1,75 +1,151 @@
 @page "/autocomplete-search"
-@using System.Net.Http.Json
-@inject HttpClient Http
-@inject IConfiguration Configuration
+@using AzureAISearchPlayground.Components.Services
+@using Azure.Search.Documents.Models
+@inject ISearchService SearchService
+@rendermode InteractiveServer
 
-<PageTitle>Autocomplete Search</PageTitle>
+<PageTitle>Autocomplete Search Page</PageTitle>
 
-<h1>Autocomplete Search</h1>
-
-<input @bind="searchQuery" @bind:event="oninput" placeholder="Search for a movie..." class="form-control" />
-
-@if (searchResults != null && searchResults.Any())
-{
-    <div class="grid">
-        @foreach (var result in searchResults)
-        {
-            <div class="grid-item">
-                <img src="@result.CoverImageUrl" alt="@result.Title" />
-                <p>@result.Title</p>
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="input-group">
+                <input type="text" class="form-control" placeholder="Enter search term..." 
+                       @bind="searchText" @oninput="FetchAutocompleteSuggestions" />
+                <button class="btn btn-primary" @onclick="PerformSearch">Search</button>
             </div>
-        }
+            <ul class="list-group mt-2" style="position: absolute; z-index: 1000;" 
+                hidden="@(!showSuggestions || autocompleteSuggestions.Count == 0)">
+                @foreach (var suggestion in autocompleteSuggestions)
+                {
+                    <li class="list-group-item list-group-item-action" 
+                        @onclick="() => SelectSuggestion(suggestion)">
+                        @suggestion
+                    </li>
+                }
+            </ul>
+        </div>
     </div>
-}
-else if (!string.IsNullOrEmpty(searchQuery))
-{
-    <p>No results found.</p>
-}
+    
+    @if (isLoading)
+    {
+        <div class="text-center">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (searchResults != null && searchResults.Any())
+    {
+        <div class="row">
+            @foreach (var result in searchResults)
+            {
+                <div class="col-6 col-sm-4 col-md-3 col-lg-2 mb-4">
+                    <div class="card h-100">
+                        @if (!string.IsNullOrEmpty(result.Document.ImageUri))
+                        {
+                            <img src="@result.Document.ImageUri" class="card-img-top" alt="@result.Document.Title" loading="lazy" />
+                        }
+                        else
+                        {
+                            <div class="placeholder-image d-flex align-items-center justify-content-center bg-light text-center p-2" style="height: 200px;">
+                                <span>No Image</span>
+                            </div>
+                        }
+                        <div class="card-body">
+                            <h5 class="card-title text-truncate" title="@result.Document.Title">@result.Document.Title</h5>
+                            @if (result.Document.Year.HasValue)
+                            {
+                                <p class="card-text small">@result.Document.Year</p>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(searchText) && searchPerformed)
+    {
+        <div class="alert alert-info">No results found for "@searchText"</div>
+    }
+</div>
+
+<style>
+    .card {
+        transition: transform 0.2s ease;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    .card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+
+    .card-img-top {
+        aspect-ratio: 2/3;
+        object-fit: cover;
+    }
+
+    .placeholder-image {
+        aspect-ratio: 2/3;
+    }
+</style>
 
 @code {
-    private string searchQuery = string.Empty;
-    private List<Movie> searchResults = new();
+    public string? searchText = "";
+    public List<SearchResult<MeoSearchResult>>? searchResults;
+    public List<string> autocompleteSuggestions = new();
+    public bool isLoading = false;
+    public bool searchPerformed = false;
+    public bool showSuggestions = false;
 
-    private async Task OnSearchQueryChanged(ChangeEventArgs e)
+    private async Task FetchAutocompleteSuggestions(ChangeEventArgs e)
     {
-        searchQuery = e.Value.ToString();
-        if (!string.IsNullOrEmpty(searchQuery))
+        if (string.IsNullOrWhiteSpace(searchText))
         {
-            var apiKey = Configuration["AZURE_SEARCH_API_KEY"];
-            var serviceName = Configuration["AZURE_SEARCH_SERVICE_NAME"];
-            var indexName = Configuration["AZURE_SEARCH_INDEX_NAME"];
-            var endpoint = Configuration["AZURE_SEARCH_ENDPOINT"];
-
-            var url = $"{endpoint}/indexes/{indexName}/docs/autocomplete?api-version=2021-04-30-Preview&search={searchQuery}&suggesterName=sg";
-            Http.DefaultRequestHeaders.Add("api-key", apiKey);
-
-            var response = await Http.GetFromJsonAsync<AutocompleteResponse>(url);
-            searchResults = response?.Value.Select(v => new Movie
-            {
-                Title = v.Text,
-                CoverImageUrl = v.Document.CoverImageUrl
-            }).ToList() ?? new List<Movie>();
+            autocompleteSuggestions.Clear();
+            showSuggestions = false;
+            return;
         }
-        else
+
+        autocompleteSuggestions = await SearchService.GetAutocompleteSuggestionsAsync(searchText);
+        showSuggestions = true;
+    }
+
+    private async Task PerformSearch()
+    {
+        if (string.IsNullOrWhiteSpace(searchText))
+            return;
+
+        isLoading = true;
+        searchPerformed = true;
+        showSuggestions = false;
+
+        try
         {
-            searchResults.Clear();
+            searchResults = (await SearchService.MeoSearchAsync(searchText))?.ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Search error: {ex.Message}");
+            searchResults = null;
+        }
+        finally
+        {
+            isLoading = false;
         }
     }
 
-    private class AutocompleteResponse
+    private void SelectSuggestion(string suggestion)
     {
-        public List<AutocompleteResult> Value { get; set; }
+        searchText = suggestion;
+        showSuggestions = false;
+        PerformSearch();
     }
 
-    private class AutocompleteResult
+    protected override async Task OnInitializedAsync()
     {
-        public string Text { get; set; }
-        public Movie Document { get; set; }
-    }
-
-    private class Movie
-    {
-        public string Title { get; set; }
-        public string CoverImageUrl { get; set; }
+        await PerformSearch();
     }
 }

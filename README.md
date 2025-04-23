@@ -10,17 +10,23 @@ AzureAISearchPlayground is a Blazor application that demonstrates the use of Azu
 
 ## Setup
 
-### .env.sample
+### environment variables
+The application uses user secrets to store sensitive information such as API keys and service names. To set up the environment variables, follow these steps:
 
-Create a `.env.sample` file in the root directory of the project with the following structure:
-
+#### Developer Machine
+1. Open a command prompt or terminal window.
+2. Navigate to the project directory where the `AzureAISearchPlayground.csproj` file is located.
+3. Run the following commands to set up user secrets for your project:
 ```
-AZURE_SEARCH_API_KEY=your-azure-search-api-key
-AZURE_SEARCH_SERVICE_NAME=your-azure-search-service-name
-AZURE_SEARCH_INDEX_NAME=your-azure-search-index-name
-AZURE_SEARCH_ENDPOINT=your-azure-search-endpoint-url
-```
+# Initialize user secrets for your project
+dotnet user-secrets init --project src\AzureAISearchPlayground
 
+# Set each configuration value
+dotnet user-secrets set "AzureAISearch:ApiKey" "your-azure-search-api-key" --project src\AzureAISearchPlayground
+dotnet user-secrets set "AzureAISearch:ServiceName" "your-azure-search-service-name" --project src\AzureAISearchPlayground
+dotnet user-secrets set "AzureAISearch:IndexName" "your-azure-search-index-name" --project src\AzureAISearchPlayground
+dotnet user-secrets set "AzureAISearch:Endpoint" "your-azure-search-endpoint-url" --project src\AzureAISearchPlayground
+```
 Replace the placeholder values with your actual Azure Search credentials and endpoint information.
 
 ### Running the Project

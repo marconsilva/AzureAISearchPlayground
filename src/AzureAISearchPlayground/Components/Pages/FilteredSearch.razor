@@ -1,107 +1,152 @@
 @page "/filtered-search"
-@using System.Net.Http.Json
-@inject HttpClient Http
-@inject IConfiguration Configuration
+@using AzureAISearchPlayground.Components.Services
+@using Azure.Search.Documents.Models
+@inject ISearchService SearchService
+@rendermode InteractiveServer
 
-<PageTitle>Filtered Search</PageTitle>
+<PageTitle>Faceted Search Page</PageTitle>
 
-<h1>Filtered Search</h1>
-
-<div class="filters">
-    <label>
-        Genre:
-        <select @bind="selectedGenre" @onchange="OnFilterChanged">
-            <option value="">All</option>
-            @foreach (var genre in genres)
+<div class="container mt-4">
+    <div class="row">
+        <!-- Sidebar for Filters -->
+        <div class="col-md-3">
+            <h5>Filters</h5>
+            <div class="mb-3"> 
+            @foreach (var facet in facets)
             {
-                <option value="@genre">@genre</option>
+                <div>
+                    <label class="form-label">@facet.Key</label>
+                    <select class="form-select" @onchange="(e) => UpdateFilter(facet.Key, e.Value?.ToString())">
+                        <option value="">All</option>
+                        @foreach (var value in facet.Value)
+                        {
+                            <option value="@value">@value</option>
+                        }
+                    </select>
+                </div>
             }
-        </select>
-    </label>
-    <label>
-        Year:
-        <select @bind="selectedYear" @onchange="OnFilterChanged">
-            <option value="">All</option>
-            @foreach (var year in years)
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="col-md-9">
+            <div class="input-group mb-4">
+                <input type="text" class="form-control" placeholder="Enter search term..." @bind="searchText" @bind:event="oninput" />
+                <button class="btn btn-primary" @onclick="PerformSearch">Search</button>
+            </div>
+
+            @if (isLoading)
             {
-                <option value="@year">@year</option>
+                <div class="text-center">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
             }
-        </select>
-    </label>
+            else if (searchResults != null && searchResults.Any())
+            {
+                <div class="row">
+                    @foreach (var result in searchResults)
+                    {
+                        <div class="col-6 col-sm-4 col-md-3 col-lg-2 mb-4">
+                            <div class="card h-100">
+                                @if (!string.IsNullOrEmpty(result.Document.ImageUri))
+                                {
+                                    <img src="@result.Document.ImageUri" class="card-img-top" alt="@result.Document.Title" loading="lazy" />
+                                }
+                                else
+                                {
+                                    <div class="placeholder-image d-flex align-items-center justify-content-center bg-light text-center p-2" style="height: 200px;">
+                                        <span>No Image</span>
+                                    </div>
+                                }
+                                <div class="card-body">
+                                    <h5 class="card-title text-truncate" title="@result.Document.Title">@result.Document.Title</h5>
+                                    @if (result.Document.Year.HasValue)
+                                    {
+                                        <p class="card-text small">@result.Document.Year</p>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else if (!string.IsNullOrEmpty(searchText) && searchPerformed)
+            {
+                <div class="alert alert-info">No results found for "@searchText"</div>
+            }
+        </div>
+    </div>
 </div>
 
-@if (searchResults != null && searchResults.Any())
-{
-    <div class="grid">
-        @foreach (var result in searchResults)
-        {
-            <div class="grid-item">
-                <img src="@result.CoverImageUrl" alt="@result.Title" />
-                <p>@result.Title</p>
-            </div>
-        }
-    </div>
-}
-else if (isSearching)
-{
-    <p>Loading...</p>
-}
-else
-{
-    <p>No results found.</p>
-}
+<style>
+    .card {
+        transition: transform 0.2s ease;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    .card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+
+    .card-img-top {
+        aspect-ratio: 2/3;
+        object-fit: cover;
+    }
+
+    .placeholder-image {
+        aspect-ratio: 2/3;
+    }
+</style>
 
 @code {
-    private string selectedGenre = string.Empty;
-    private string selectedYear = string.Empty;
-    private List<Movie> searchResults = new();
-    private List<string> genres = new() { "Action", "Comedy", "Drama", "Horror", "Sci-Fi" };
-    private List<string> years = new() { "2021", "2020", "2019", "2018", "2017" };
-    private bool isSearching = false;
+    public string? searchText = "";
+    public List<SearchResult<MeoSearchResult>>? searchResults;
+    public Dictionary<string, List<string>> facets = new();
+    public Dictionary<string, string> selectedFilters = new();
+    public bool isLoading = false;
+    public bool searchPerformed = false;
 
-    private async Task OnFilterChanged(ChangeEventArgs e)
+    protected override async Task OnInitializedAsync()
     {
-        isSearching = true;
-        var apiKey = Configuration["AZURE_SEARCH_API_KEY"];
-        var serviceName = Configuration["AZURE_SEARCH_SERVICE_NAME"];
-        var indexName = Configuration["AZURE_SEARCH_INDEX_NAME"];
-        var endpoint = Configuration["AZURE_SEARCH_ENDPOINT"];
-
-        var filter = string.Empty;
-        if (!string.IsNullOrEmpty(selectedGenre))
-        {
-            filter += $"genre eq '{selectedGenre}'";
-        }
-        if (!string.IsNullOrEmpty(selectedYear))
-        {
-            if (!string.IsNullOrEmpty(filter))
-            {
-                filter += " and ";
-            }
-            filter += $"year eq '{selectedYear}'";
-        }
-
-        var url = $"{endpoint}/indexes/{indexName}/docs?api-version=2021-04-30-Preview&$filter={filter}";
-        Http.DefaultRequestHeaders.Add("api-key", apiKey);
-
-        var response = await Http.GetFromJsonAsync<SearchResponse>(url);
-        searchResults = response?.Value.Select(v => new Movie
-        {
-            Title = v.Title,
-            CoverImageUrl = v.CoverImageUrl
-        }).ToList() ?? new List<Movie>();
-
-        isSearching = false;
+        facets = await SearchService.GetFacetsAsync();
+        await PerformSearch();
     }
 
-    private class SearchResponse
+    private async Task PerformSearch()
     {
-        public List<Movie> Value { get; set; }
+        isLoading = true;
+        searchPerformed = true;
+
+        try
+        {
+            searchResults = (await SearchService.FacetedSearchAsync(searchText, selectedFilters))?.ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Search error: {ex.Message}");
+            searchResults = null;
+        }
+        finally
+        {
+            isLoading = false;
+        }
     }
 
-    private class Movie
+    private void UpdateFilter(string facetKey, string? value)
     {
-        public string Title { get; set; }
-        public string CoverImageUrl { get; set; }
+        if (string.IsNullOrEmpty(value))
+        {
+            selectedFilters.Remove(facetKey);
+        }
+        else
+        {
+            selectedFilters[facetKey] = value;
+        }
+
+        PerformSearch();
     }
 }

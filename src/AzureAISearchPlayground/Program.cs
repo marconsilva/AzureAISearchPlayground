@@ -1,10 +1,15 @@
 using AzureAISearchPlayground.Components;
+using AzureAISearchPlayground.Components.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+
+builder.Services.AddHttpClient();
+builder.Services.AddScoped<ISearchService, SearchService>();
 
 var app = builder.Build();
 
@@ -17,6 +22,7 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
 
 
 app.UseAntiforgery();
