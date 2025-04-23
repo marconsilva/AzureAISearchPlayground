@@ -14,7 +14,7 @@ resource "azurerm_container_app_environment" "app_env" {
 }
 
 resource "azurerm_container_registry" "acr" {
-  name                = "azureaiacr"
+  name                = "labneumhsearchplaygroundacr"
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
   sku                 = "Basic"
@@ -28,17 +28,22 @@ resource "azurerm_container_app" "app" {
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
 
-  configuration {
-    ingress {
-      external_enabled = true
-      target_port      = 5007
-    }
-    registries {
-      server   = azurerm_container_registry.acr.login_server
-      username = azurerm_container_registry.acr.admin_username
-      password = azurerm_container_registry.acr.admin_password
+  ingress {
+    external_enabled = true
+    target_port      = 8080
+    transport        = "auto"
+    traffic_weight {
+      latest_revision = true
+      percentage     = 100
     }
   }
+
+  registry {
+    server   = azurerm_container_registry.acr.login_server
+    username = azurerm_container_registry.acr.admin_username
+  }
+
+  revision_mode = "Single"
 
   template {
     container {
