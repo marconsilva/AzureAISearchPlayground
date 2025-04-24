@@ -1,0 +1,29 @@
+name: Build and Push to Azure Container Registry
+
+on:
+  push:
+    paths:
+      - 'src/AzureAISearchPlayground/**'
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+    # Checkout the repository
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    # Log in to Azure Container Registry
+    - name: Log in to Azure Container Registry
+      uses: azure/docker-login@v1
+      with:
+        login-server: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
+        username: ${{ secrets.AZURE_ACR_USERNAME }}
+        password: ${{ secrets.AZURE_ACR_PASSWORD }}
+
+    # Build and push the Docker image
+    - name: Build and push Docker image
+      run: |
+        docker build -t ${{ secrets.AZURE_ACR_LOGIN_SERVER }}/azureai-search-playground:latest src/AzureAISearchPlayground
+        docker push ${{ secrets.AZURE_ACR_LOGIN_SERVER }}/azureai-search-playground:latest

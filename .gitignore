@@ -10,6 +10,11 @@
 *.userosscache
 *.sln.docstates
 
+#exclude terraform files
+.terraform
+.terraform.lock.hcl
+tfplan
+
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 .env
