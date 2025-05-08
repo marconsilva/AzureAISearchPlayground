@@ -42,12 +42,12 @@ resource "azurerm_container_registry" "acr" {
   admin_enabled = true
 }
 
-resource "azurerm_role_assignment" "acr_pull" {
-  principal_id                     = azurerm_container_app.app.identity[0].principal_id
-  role_definition_name             = "AcrPull"
-  scope                            = azurerm_container_registry.acr.id
-  skip_service_principal_aad_check = true
-}
+# resource "azurerm_role_assignment" "acr_pull" {
+#   principal_id                     = azurerm_container_app.app.identity[0].principal_id
+#   role_definition_name             = "AcrPull"
+#   scope                            = azurerm_container_registry.acr.id
+#   skip_service_principal_aad_check = true
+# }
 
 # Create a User Assigned Managed Identity for secure access
 resource "azurerm_user_assigned_identity" "app_identity" {
@@ -64,7 +64,7 @@ resource "azurerm_container_app_environment" "app_env" {
 
 
 resource "azurerm_container_app" "app" {
-  name                = "labneumhsearchplayground-app"
+  name                = "labneumhsearchplayground001-app"
   container_app_environment_id = azurerm_container_app_environment.app_env.id
   resource_group_name = data.azurerm_resource_group.rg.name
   revision_mode = "Single"
@@ -98,8 +98,11 @@ resource "azurerm_container_app" "app" {
 
 
   template {
+    max_replicas   = 10
+    min_replicas   = 0
+    termination_grace_period_seconds = 0
     container {
-      name   = "searchplayground"
+      name   = "labneumhsearchplayground001-app"
       image  = "${azurerm_container_registry.acr.login_server}/azureai-search-playground:latest"
       cpu    = 0.5
       memory = "1.0Gi"
@@ -122,4 +125,9 @@ resource "azurerm_container_app" "app" {
       }
     }
   }
+
+  # Explicit dependency to ensure the environment is fully provisioned
+  depends_on = [
+    azurerm_container_app_environment.app_env
+  ]
 }
